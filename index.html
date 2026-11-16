@@ -18,9 +18,12 @@
     button { min-height: 42px; touch-action: manipulation; }
     button:focus-visible, input:focus-visible { outline: 2px solid #f3c84b; outline-offset: 2px; }
     .volume { display: flex; align-items: center; gap: 8px; margin-left: auto; color: #b1c0df; font-size: 13px; }
-    input { width: 100px; accent-color: #f3c84b; }
+    input { width: 100px; min-height: 32px; accent-color: #f3c84b; }
     .help { color: #8996b0; font-size: 12px; line-height: 1.6; margin: 10px 2px 0; }
-    @media (max-width: 520px) { .volume { margin-left: 0; width: 100%; } }
+    @media (max-width: 520px) {
+      .volume { margin-left: 0; width: 100%; }
+      .volume input { flex: 1; width: auto; min-width: 130px; touch-action: pan-x; }
+    }
   </style>
 </head>
 <body>
@@ -68,6 +71,7 @@
   const bulbs=Array.from({length:74},()=>{const y=.075+random()*.835,phi=random()*Math.PI*2,r=(1-y)*(1.003+random()*.035);return{x:Math.cos(phi)*r,y,z:Math.sin(phi)*r,g:'@O*#'[Math.floor(random()*4)],phase:random()*Math.PI*2,color:bulbColors[Math.floor(random()*bulbColors.length)]};});
   const flakes=Array.from({length:220},()=>({x:random()*W,y:random()*H,speed:12+random()*29,drift:random()*Math.PI*2,g:'++·**..'[Math.floor(random()*7)],shade:Math.floor(random()*3)}));
   let time=0, speed=1, paused=false, last=performance.now(), volumeBeforeMute=.4;
+  let volumeValue=.4, audioContext=null, audioGain=null;
   const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
   const smooth=v=>{v=clamp(v);return v*v*(3-2*v);};
   function text(s,x,y,color='#7d88a0',size=12){ctx.fillStyle=color;ctx.font=`${size}px Consolas, monospace`;ctx.fillText(s,x,y);}
@@ -89,7 +93,7 @@
     text(`◆ t ${time.toFixed(2)}s`,620,25,colors.gold);
     if(time>=8.2)text('M E R R Y   C H R I S T M A S   2 0 2 6',200,751,colors.gold);
     text('@cfs.ascii',20,787);text(`-rotation ${((rot*180/Math.PI)%360).toFixed(2)}°   -lights x${lightCount}`,20,805);text(`-letters ${grid.size.toLocaleString()}`,20,823);
-    const state=song.paused?'PAUSED':song.volume===0?'MUTED':`${Math.round(song.volume*100)}%`;
+    const state=song.paused?'PAUSED':volumeValue===0?'MUTED':`${Math.round(volumeValue*100)}%`;
     text(`-music ${state}`,20,841,colors.soft);
   }
   function frame(now){const dt=Math.min((now-last)/1000,.05);last=now;if(!paused)time+=dt;draw();requestAnimationFrame(frame);}
@@ -98,11 +102,16 @@
   document.querySelector('#slower').addEventListener('click',()=>changeSpeed(-.25));
   document.querySelector('#faster').addEventListener('click',()=>changeSpeed(.25));
   document.querySelector('#restart').addEventListener('click',()=>{time=0;paused=false;last=performance.now();playButton.textContent='Tạm dừng';if(!song.paused)song.currentTime=0;});
-  async function startMusic(){try{await song.play();musicButton.textContent='Tắt nhạc';}catch{musicButton.textContent='Bật nhạc';}}
+  async function prepareAudio(){
+    const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+    if(AudioContextClass&&!audioContext){audioContext=new AudioContextClass();audioGain=audioContext.createGain();audioGain.gain.value=volumeValue;const source=audioContext.createMediaElementSource(song);source.connect(audioGain);audioGain.connect(audioContext.destination);}
+    if(audioContext&&audioContext.state==='suspended')await audioContext.resume();
+  }
+  async function startMusic(){try{await prepareAudio();song.volume=volumeValue;await song.play();musicButton.textContent='Tắt nhạc';}catch{musicButton.textContent='Bật nhạc';}}
   musicButton.addEventListener('click',async()=>{if(song.paused)await startMusic();else{song.pause();musicButton.textContent='Bật nhạc';}});
-  muteButton.addEventListener('click',()=>{if(song.volume>0){volumeBeforeMute=song.volume;song.volume=0;volumeInput.value=0;}else{song.volume=volumeBeforeMute||.4;volumeInput.value=Math.round(song.volume*100);}syncVolume();});
-  function syncVolume(){song.volume=Number(volumeInput.value)/100;level.textContent=`${volumeInput.value}%`;muteButton.textContent=song.volume===0?'Bật tiếng':'Tắt tiếng';}
-  volumeInput.addEventListener('input',()=>{if(Number(volumeInput.value)>0)volumeBeforeMute=Number(volumeInput.value)/100;syncVolume();});syncVolume();
+  muteButton.addEventListener('click',()=>{if(volumeValue>0){volumeBeforeMute=volumeValue;volumeInput.value=0;}else{volumeInput.value=Math.round((volumeBeforeMute||.4)*100);}syncVolume();});
+  function syncVolume(){volumeValue=Number(volumeInput.value)/100;if(volumeValue>0)volumeBeforeMute=volumeValue;song.volume=volumeValue;if(audioGain)audioGain.gain.setTargetAtTime(volumeValue,audioContext.currentTime,.015);level.textContent=`${volumeInput.value}%`;muteButton.textContent=volumeValue===0?'Bật tiếng':'Tắt tiếng';}
+  volumeInput.addEventListener('input',syncVolume);volumeInput.addEventListener('change',syncVolume);syncVolume();
   window.addEventListener('keydown',e=>{if(['INPUT','BUTTON'].includes(document.activeElement.tagName))return;if(e.code==='Space'){e.preventDefault();playButton.click();}else if(e.key.toLowerCase()==='r')document.querySelector('#restart').click();else if(e.key.toLowerCase()==='m')musicButton.click();else if(e.key==='+'||e.key==='=')volumeInput.value=Math.min(100,Number(volumeInput.value)+5),volumeInput.dispatchEvent(new Event('input'));else if(e.key==='-')volumeInput.value=Math.max(0,Number(volumeInput.value)-5),volumeInput.dispatchEvent(new Event('input'));else if(e.key==='0')muteButton.click();else if(e.key==='ArrowUp')changeSpeed(.25);else if(e.key==='ArrowDown')changeSpeed(-.25);});
   song.addEventListener('error',()=>{musicButton.title='Không tải được assets/Christmas.mp3';});
   requestAnimationFrame(frame);
