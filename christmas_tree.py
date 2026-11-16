@@ -1,4 +1,4 @@
-"""ASCII Christmas Tree 2026
+"""ASCII Christmas Tree 2026 — 
 
 Yêu cầu: Python >=3.10, pygame >=2.5
 Chạy: python -m pip install -r requirements.txt
@@ -9,6 +9,9 @@ Chạy: python -m pip install -r requirements.txt
   R       : Chạy lại hoạt cảnh
   Up/Down : Tăng / giảm tốc độ quay
   F hoặc F11: Toàn màn hình
+  M       : Bật / tắt nhạc nền
+  + / -   : Tăng / giảm âm lượng
+  0       : Tắt / bật tiếng
   ESC     : Thoát
 """
 from __future__ import annotations
@@ -16,10 +19,11 @@ from __future__ import annotations
 import math
 import random
 import sys
+from pathlib import Path
 from dataclasses import dataclass
 
 try:
-    import pygame  # type: ignore[reportMissingImports]
+    import pygame
 except ImportError:
     print("Chưa cài pygame. Mở terminal trong thư mục python và chạy:")
     print("    python -m pip install -r requirements.txt")
@@ -139,7 +143,7 @@ class ChristmasTree:
     def __init__(self) -> None:
         pygame.init()
         self.screen = pygame.display.set_mode((WIDTH,HEIGHT))
-        pygame.display.set_caption('ASCII Christmas Tree | 2026 — Space / R / F / Esc')
+        pygame.display.set_caption('ASCII Christmas Tree | 2026 — Space / R / M / F / Esc')
         self.clock=pygame.time.Clock()
         self.atlas=Atlas()
         self.tree,self.ribbons,self.bulbs,self.flakes=make_geometry()
@@ -148,6 +152,47 @@ class ChristmasTree:
         self.paused=False
         self.fullscreen=False
         self.glyph_count=0
+        self.music_ready=False
+        self.music_enabled=True
+        self.volume=0.40
+        self.setup_music()
+
+    def setup_music(self) -> None:
+        """Phát nhạc tự động từ lúc mở chương trình; không phụ thuộc CWD."""
+        source = Path(__file__).resolve().parent / 'assets' / 'Christmas.mp3'
+        if not source.is_file():
+            print(f'Không tìm thấy nhạc: {source} (hoạt cảnh vẫn chạy).')
+            return
+        try:
+            if pygame.mixer.get_init() is None:
+                pygame.mixer.init()
+            pygame.mixer.music.load(str(source))
+            pygame.mixer.music.set_volume(self.volume)
+            pygame.mixer.music.play(loops=-1)
+            self.music_ready = True
+            print(f'Đang tự phát nhạc nền: {source.name} (nhấn M để tắt/bật).')
+        except pygame.error as err:
+            print(f'Không khởi tạo được âm thanh: {err} (hoạt cảnh vẫn chạy).')
+
+    def sync_music(self, restart: bool = False) -> None:
+        """Đồng bộ âm thanh với phím Space, R, M."""
+        if not self.music_ready:
+            return
+        try:
+            if restart:
+                pygame.mixer.music.play(loops=-1)
+            if self.paused or not self.music_enabled:
+                pygame.mixer.music.pause()
+            else:
+                pygame.mixer.music.unpause()
+        except pygame.error as err:
+            print(f'Lỗi phát âm thanh: {err}')
+            self.music_ready = False
+
+    def change_volume(self, delta: float) -> None:
+        self.volume = clamp(self.volume + delta)
+        if self.music_ready:
+            pygame.mixer.music.set_volume(self.volume)
 
     def project(self,x:float,z:float,y:float,rotation:float) -> tuple[float,float,float]:
         cosine,sine=math.cos(rotation),math.sin(rotation)
@@ -280,6 +325,8 @@ class ChristmasTree:
         self.atlas.line(self.screen,'@cfs.ascii',20,787)
         self.atlas.line(self.screen,f'-rotation {math.degrees(angle)%360:06.2f}°   -lights x{bulbs}',20,805)
         self.atlas.line(self.screen,f'-letters {self.glyph_count:,}',20,823)
+        state = 'OFF' if not self.music_enabled or self.volume == 0 else f'{round(self.volume * 100)}%'
+        self.atlas.line(self.screen,f'-music {state}   [+/-] volume   [0] mute',20,841,'gold_soft')
 
     def run(self) -> None:
         running=True
@@ -289,8 +336,25 @@ class ChristmasTree:
                 if event.type==pygame.QUIT:running=False
                 elif event.type==pygame.KEYDOWN:
                     if event.key==pygame.K_ESCAPE:running=False
-                    elif event.key==pygame.K_SPACE:self.paused=not self.paused
-                    elif event.key==pygame.K_r:self.time=0.0;self.paused=False
+                    elif event.key==pygame.K_SPACE:
+                        self.paused=not self.paused
+                        self.sync_music()
+                    elif event.key==pygame.K_r:
+                        self.time=0.0;self.paused=False
+                        self.sync_music(restart=True)
+                    elif event.key==pygame.K_m:
+                        self.music_enabled=not self.music_enabled
+                        self.sync_music()
+                    elif event.key in (pygame.K_PLUS,pygame.K_EQUALS,pygame.K_KP_PLUS):
+                        self.change_volume(.05)
+                    elif event.key in (pygame.K_MINUS,pygame.K_KP_MINUS):
+                        self.change_volume(-.05)
+                    elif event.key==pygame.K_0:
+                        if self.volume > 0:
+                            self.previous_volume=self.volume
+                            self.change_volume(-self.volume)
+                        else:
+                            self.change_volume(getattr(self,'previous_volume',.40))
                     elif event.key==pygame.K_UP:self.speed=min(4.0,self.speed+.25)
                     elif event.key==pygame.K_DOWN:self.speed=max(.25,self.speed-.25)
                     elif event.key in (pygame.K_f,pygame.K_F11):
@@ -308,14 +372,15 @@ class ChristmasTree:
             pygame.display.flip()
         pygame.quit()
 
+
 def main() -> int:
     try:
         ChristmasTree().run()
         return 0
     except pygame.error as err:
-        print(f'Pygame gặp lỗi: {err}', file=sys.stderr)
+        print(f'Pygame gặp lỗi: {err}',file=sys.stderr)
         return 1
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     raise SystemExit(main())
