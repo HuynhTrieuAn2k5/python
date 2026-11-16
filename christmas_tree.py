@@ -1,4 +1,4 @@
-"""ASCII Christmas Tree 2026 — tái dựng độc lập từ hình ảnh video.
+"""ASCII Christmas Tree 2026
 
 Yêu cầu: Python >=3.10, pygame >=2.5
 Chạy: python -m pip install -r requirements.txt
