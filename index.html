@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#040812">
+  <title>ASCII Christmas Tree 2026</title>
+  <style>
+    :root { color-scheme: dark; font-family: Consolas, "Courier New", monospace; background: #040812; color: #e1e9ff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+    main { width: min(100%, 760px); }
+    .stage { position: relative; overflow: hidden; border: 1px solid #25304b; border-radius: 12px; background: #040812; box-shadow: 0 18px 70px #0009; }
+    canvas { display: block; width: 100%; height: auto; }
+    .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding: 12px 2px 0; }
+    button { border: 1px solid #394765; border-radius: 7px; background: #10192b; color: #e1e9ff; font: inherit; padding: 8px 11px; cursor: pointer; }
+    button:hover { background: #1b2941; }
+    button:focus-visible, input:focus-visible { outline: 2px solid #f3c84b; outline-offset: 2px; }
+    .volume { display: flex; align-items: center; gap: 8px; margin-left: auto; color: #b1c0df; font-size: 13px; }
+    input { width: 100px; accent-color: #f3c84b; }
+    .help { color: #8996b0; font-size: 12px; line-height: 1.6; margin: 10px 2px 0; }
+    @media (max-width: 520px) { .volume { margin-left: 0; width: 100%; } }
+  </style>
+</head>
+<body>
+<main>
+  <div class="stage"><canvas id="scene" width="720" height="860" aria-label="Cây thông Giáng Sinh ASCII chuyển động"></canvas></div>
+  <div class="controls">
+    <button id="play" type="button">Tạm dừng</button>
+    <button id="restart" type="button">Chạy lại</button>
+    <button id="music" type="button">Bật nhạc</button>
+    <button id="mute" type="button">Tắt tiếng</button>
+    <label class="volume">Âm lượng <input id="volume" type="range" min="0" max="100" value="40"><span id="level">40%</span></label>
+  </div>
+  <p class="help">Phím tắt: Space tạm dừng · R chạy lại · ↑/↓ chỉnh tốc độ · M bật/tắt nhạc · +/- chỉnh âm lượng · 0 tắt tiếng</p>
+  <audio id="song" src="assets/Christmas.mp3" preload="none" loop></audio>
+</main>
+<script>
+(() => {
+  const canvas = document.querySelector('#scene');
+  const ctx = canvas.getContext('2d');
+  const song = document.querySelector('#song');
+  const playButton = document.querySelector('#play');
+  const musicButton = document.querySelector('#music');
+  const muteButton = document.querySelector('#mute');
+  const volumeInput = document.querySelector('#volume');
+  const level = document.querySelector('#level');
+  const W = canvas.width, H = canvas.height, cx = 358, base = 586, treeH = 437, radius = 212;
+  const colors = { green0:'#0b3e2d', green1:'#176b40', green2:'#218f4a', green3:'#30bd60', gold:'#f3c84b', soft:'#b17c27', red:'#de4765', blue:'#6ea7f5', cyan:'#65c5ad', purple:'#9878b7', snow:'#e1e9ff', gray:'#7d88a0' };
+  let seed = 240122;
+  const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const glyphs = '+xvwoO#@&%*^=~';
+  const tree = Array.from({length:7300}, () => {
+    const y=1-Math.sqrt(random()), phi=random()*Math.PI*2, branch=.72+random()*.29;
+    const tier=1+.075*Math.cos(9*Math.PI*y)+.03*Math.sin(63*y+phi*3), radial=(1-y)*branch*tier;
+    return {x:Math.cos(phi)*radial,y,z:Math.sin(phi)*radial,g:glyphs[Math.floor(random()*glyphs.length)],shade:random(),phase:random()*Math.PI*2};
+  });
+  const ribbons = Array.from({length:1440}, (_,i) => {
+    const band=Math.floor(i/360), phi=(i%360)/359*Math.PI*2, y=.15+band*.2+.022*Math.sin(phi*1.65+band*2), r=(1-y)*1.015;
+    return {x:Math.cos(phi)*r,y,z:Math.sin(phi)*r,g:'~=+*#'[Math.floor(random()*5)],i};
+  });
+  const bulbColors=['gold','gold','red','red','blue','cyan','purple'];
+  const bulbs=Array.from({length:74},()=>{const y=.075+random()*.835,phi=random()*Math.PI*2,r=(1-y)*(1.003+random()*.035);return{x:Math.cos(phi)*r,y,z:Math.sin(phi)*r,g:'@O*#'[Math.floor(random()*4)],phase:random()*Math.PI*2,color:bulbColors[Math.floor(random()*bulbColors.length)]};});
+  const flakes=Array.from({length:220},()=>({x:random()*W,y:random()*H,speed:12+random()*29,drift:random()*Math.PI*2,g:'++·**..'[Math.floor(random()*7)],shade:Math.floor(random()*3)}));
+  let time=0, speed=1, paused=false, last=performance.now(), volumeBeforeMute=.4;
+  const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
+  const smooth=v=>{v=clamp(v);return v*v*(3-2*v);};
+  function text(s,x,y,color='#7d88a0',size=12){ctx.fillStyle=color;ctx.font=`${size}px Consolas, monospace`;ctx.fillText(s,x,y);}
+  function draw(){
+    ctx.fillStyle='#040812';ctx.fillRect(0,0,W,H);
+    for(let i=0;i<70;i++){ctx.fillStyle='#131d2f';ctx.fillRect((i*113.73+17.8)%W,(i*187.41+3.7)%710,2,2);}
+    for(const f of flakes){const x=(f.x+Math.sin(time*.8+f.drift)*9)%W,y=(f.y+time*f.speed)%(H+30)-15;ctx.fillStyle=f.shade?'#e1e9ff':'#7d88a0';text(f.g,x,y,ctx.fillStyle,12);}
+    const growth=smooth(time/7.9), floor=1-growth, rot=time*.27*speed, grid=new Map();
+    const put=(x,y,z,g,color,brightness=1,force=false)=>{const col=Math.round(x/6.35),row=Math.round(y/10.25);if(col<0||col>=114||row<0||row>=84)return;const key=row*120+col, old=grid.get(key);if(force||!old||z>=old.z)grid.set(key,{x:col*6.35,y:row*10.25,z,g,color,brightness});};
+    const co=Math.cos(rot),si=Math.sin(rot);
+    for(const p of tree){if(p.y<floor)continue;const xr=p.x*co-p.z*si,zr=p.x*si+p.z*co,x=cx+radius*xr*(1+zr*.105),y=base-treeH*p.y+zr*(1-p.y)*14,depth=(zr+1)*.5,shade=p.shade*.37+depth*.58+Math.sin(time*2.1+p.phase)*.06,color=shade>.69?'green3':shade>.48?'green2':shade>.31?'green1':'green0';put(x,y,zr,p.g,colors[color],.7+depth*.38);}
+    for(let i=0;i<250;i++){const y=-.085+((i*53)%250)/250*.115,x=Math.sin(i*22.3)*.06,z=Math.cos(i*17.7)*.06,xr=x*co-z*si,zr=x*si+z*co;put(cx+radius*xr*(1+zr*.105),base-treeH*y+zr*(1-y)*14,zr+.01,'#',colors.soft,.58);}
+    if(time>3.6){const n=Math.floor(ribbons.length*smooth((time-3.6)/3.9));for(let j=0;j<n;j++){const p=ribbons[j];if(p.y<floor)continue;const xr=p.x*co-p.z*si,zr=p.x*si+p.z*co;if(zr<-.18)continue;put(cx+radius*xr*(1+zr*.105),base-treeH*p.y+zr*(1-p.y)*14,zr+.08,p.g,Math.sin(time*1.7+p.i*.7)>.36?colors.gold:colors.soft,.95);}}
+    const lightCount=Math.round(bulbs.length*smooth((time-6.2)/4.8));
+    for(const p of bulbs.slice(0,lightCount)){if(p.y<floor)continue;const xr=p.x*co-p.z*si,zr=p.x*si+p.z*co;if(zr<-.12)continue;const tw=.7+.3*Math.sin(time*4.2+p.phase);put(cx+radius*xr*(1+zr*.105),base-treeH*p.y+zr*(1-p.y)*14,zr+.24,p.g,colors[p.color],tw,true);}
+    for(const p of grid.values()){ctx.globalAlpha=p.brightness<.65?.57:p.brightness<.87?.79:1;ctx.fillStyle=p.color;ctx.font='12px Consolas, monospace';ctx.fillText(p.g,p.x,p.y);ctx.globalAlpha=1;}
+    const star=smooth((time-10)/2.2);if(star>.01){const lines=['    *    ','  * # *  ','* * @ * *','  # * #  ','    *    '];ctx.globalAlpha=star;lines.forEach((line,r)=>[...line].forEach((g,c)=>{if(g!==' ')text(g,cx+(c-4)*6.5-2,130+(r-2)*10.2,colors.gold,12);}));ctx.globalAlpha=1;}
+    for(const [start,x,y,n,body] of [[9.3,150,575,10,colors.red],[10.4,293,595,10,colors.blue],[11.3,518,573,9,colors.red]]){const pr=smooth((time-start));if(pr>0){const yy=y-(1-pr)*20,rows=Math.max(4,Math.round(n*.65));for(let r=0;r<rows;r++)for(let c=0;c<n;c++){const edge=r===0||r===rows-1||c===0||c===n-1,bow=c===Math.floor(n/2)||r===Math.round(rows/2);text(bow?'@':edge?'#':(c+r)%4===0?'%':'x',x+c*6.35,yy+r*10.25,bow?colors.gold:body,12);}text('*',x+n*3.175-9,yy-12,colors.gold);text('*',x+n*3.175+4,yy-12,colors.gold);}}
+    text(`◆ t ${time.toFixed(2)}s`,620,25,colors.gold);
+    if(time>=8.2)text('M E R R Y   C H R I S T M A S   2 0 2 6',200,751,colors.gold);
+    text('@cfs.ascii',20,787);text(`-rotation ${((rot*180/Math.PI)%360).toFixed(2)}°   -lights x${lightCount}`,20,805);text(`-letters ${grid.size.toLocaleString()}`,20,823);
+    const state=song.paused?'PAUSED':song.volume===0?'MUTED':`${Math.round(song.volume*100)}%`;
+    text(`-music ${state}`,20,841,colors.soft);
+  }
+  function frame(now){const dt=Math.min((now-last)/1000,.05);last=now;if(!paused)time+=dt;draw();requestAnimationFrame(frame);}
+  playButton.addEventListener('click',()=>{paused=!paused;playButton.textContent=paused?'Tiếp tục':'Tạm dừng';});
+  document.querySelector('#restart').addEventListener('click',()=>{time=0;paused=false;last=performance.now();playButton.textContent='Tạm dừng';if(!song.paused)song.currentTime=0;});
+  async function startMusic(){try{await song.play();musicButton.textContent='Tắt nhạc';}catch{musicButton.textContent='Bật nhạc';}}
+  musicButton.addEventListener('click',async()=>{if(song.paused)await startMusic();else{song.pause();musicButton.textContent='Bật nhạc';}});
+  muteButton.addEventListener('click',()=>{if(song.volume>0){volumeBeforeMute=song.volume;song.volume=0;volumeInput.value=0;}else{song.volume=volumeBeforeMute||.4;volumeInput.value=Math.round(song.volume*100);}syncVolume();});
+  function syncVolume(){song.volume=Number(volumeInput.value)/100;level.textContent=`${volumeInput.value}%`;muteButton.textContent=song.volume===0?'Bật tiếng':'Tắt tiếng';}
+  volumeInput.addEventListener('input',()=>{if(Number(volumeInput.value)>0)volumeBeforeMute=Number(volumeInput.value)/100;syncVolume();});syncVolume();
+  window.addEventListener('keydown',e=>{if(['INPUT','BUTTON'].includes(document.activeElement.tagName))return;if(e.code==='Space'){e.preventDefault();playButton.click();}else if(e.key.toLowerCase()==='r')document.querySelector('#restart').click();else if(e.key.toLowerCase()==='m')musicButton.click();else if(e.key==='+'||e.key==='=')volumeInput.value=Math.min(100,Number(volumeInput.value)+5),volumeInput.dispatchEvent(new Event('input'));else if(e.key==='-')volumeInput.value=Math.max(0,Number(volumeInput.value)-5),volumeInput.dispatchEvent(new Event('input'));else if(e.key==='0')muteButton.click();else if(e.key==='ArrowUp')speed=Math.min(4,speed+.25);else if(e.key==='ArrowDown')speed=Math.max(.25,speed-.25);});
+  song.addEventListener('error',()=>{musicButton.title='Không tải được assets/Christmas.mp3';});
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
