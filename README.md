@@ -18,6 +18,7 @@ Trang web nằm trong `index.html` và dùng nhạc từ `assets/Christmas.mp3`.
 - **Tạm dừng** hoặc `Space`: dừng/tiếp tục hoạt cảnh
 - **Chạy lại** hoặc `R`: bắt đầu lại
 - **↑ / ↓**: tăng/giảm tốc độ quay
+- **− Tốc độ / + Tốc độ**: chỉnh tốc độ bằng nút cảm ứng trên điện thoại
 - **Bật nhạc / Tắt nhạc** hoặc `M`: điều khiển nhạc
 - **Âm lượng** hoặc `+ / -`: chỉnh âm lượng
 - **Tắt tiếng** hoặc `0`: tắt tiếng/bật lại
